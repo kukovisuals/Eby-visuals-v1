@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Vite App</title>
+  <style>
+    .tooltip {
+      background: rgba(0, 0, 0, 0.8);
+      color: white;
+      padding: 8px 12px;
+      border-radius: 5px;
+      font-size: 12px;
+    }
+  </style>
+</head>
+
+<body>
+
+
+  <!-- We'll attach our chart to this container (or create an SVG in JavaScript) -->
+  <p>Type of products </p>
+  <div id="product-filters"></div>
+  <p>Colors</p>
+  <div id="color-filters"></div>
+  <p>Dates</p>
+  <div>
+    <label for="daysSelector">Show data for the last:</label>
+    <select id="daysSelector">
+      <option value="1">1 day</option>
+      <option value="3">3 days</option>
+      <option value="6">6 days</option>
+      <option value="30">30 days</option>
+      <option value="9999" selected>All</option>
+    </select>
+  </div>
+
+  <h1>Products</h1>
+  <div id="products_two"></div>
+
+
+  <h1>Landing Pages Sessions + CVR</h1>
+  <div id="products"></div>
+  <div id="chart_1"></div>
+  <div id="chart_2"></div>
+  <div id="chart_3"></div>
+  <div id="marketing"></div>
+  <h1>Heatmap of Sales by State</h1>
+  <div id="my_dataviz"></div>
+  <h1>Sale By Instagram</h1>
+  <div id="my_dataviz2"></div>
+  <div id="multiple_lines"></div>
+
+  <svg id="deepOceanChart" width="400" height="200"></svg>
+  <svg id="pearlReliefChart" width="400" height="200"></svg>
+  <script type="module" src="/src/main.js"></script>
+</body>
+
+</html>
