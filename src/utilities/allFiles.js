@@ -65,10 +65,12 @@ export const fileOrders = [
   // { file: "./orders_export_2025-02-09.csv", date: "2025-02-09" },
   // { file: "./orders_export_2025-02-10.csv", date: "2025-02-10" },
   // { file: "./orders_export_2025-02-11.csv", date: "2025-02-11" },
-  { file: "./orders_export_2025-02-12.csv", date: "2025-02-12" },
+  // { file: "./orders_export_2025-02-12.csv", date: "2025-02-12" },
   { file: "./orders_export_2025-02-13.csv", date: "2025-02-13" },
   { file: "./orders_export_2025-02-14.csv", date: "2025-02-14" },
   { file: "./orders_export_2025-02-15.csv", date: "2025-02-15" },
   { file: "./orders_export_2025-02-16.csv", date: "2025-02-16" },
   { file: "./orders_export_2025-02-17.csv", date: "2025-02-17" },
+  { file: "./orders_export_2025-02-18.csv", date: "2025-02-18" },
+  { file: "./orders_export_2025-02-19.csv", date: "2025-02-19" },
 ];
