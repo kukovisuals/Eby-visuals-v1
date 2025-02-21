@@ -114,6 +114,7 @@ async function loadDataTwo() {
     // compute the cutoff date (today's max - selectedDays)
     // If "9999" is chosen => user wants "All", so we won't filter by date
     let cutoff = null;
+    console.log("selecte days", selectedDays)
     if (selectedDays !== 9999) {
       cutoff = new Date(maxDate.getTime() - (selectedDays * 24 * 60 * 60 * 1000));
     }
@@ -148,7 +149,6 @@ function drawMultipleStackedBars(data) {
 
   // 1) Identify all product names by grouping
   const productsMap = d3.group(newData, d => d.name);
-  // productsMap is a Map: { "Nude Bralette" -> [ {date, name, variants: [...]}, ... ] }
 
   // 2) Set up chart dimensions and container
   const width = 300;
@@ -163,6 +163,8 @@ function drawMultipleStackedBars(data) {
     const dateKeys = Array.from(
       new Set(entries.map(d => +d.date)) // +d.date => numeric timestamp for sorting
     ).sort((a, b) => a - b);
+
+
 
     const allVariants = ["xs", "sm", "md", "lg", "xl", "sdd", "mdd", "ldd", "xldd", "2xldd"];
 
@@ -184,6 +186,8 @@ function drawMultipleStackedBars(data) {
       return row;
     });
 
+    console.log("dates final",)
+
     const stack = d3.stack()
       .keys(dateKeys); // your "layers" are the different dates
     // Generate the stacked layers
@@ -194,14 +198,16 @@ function drawMultipleStackedBars(data) {
     );
 
     // F) Create scales
-    const x = d3.scaleBand()
-      .domain(allVariants) // each variant on x-axis
-      .range([margin.left, width - margin.right])
+    // 1) y-axis now uses band scale for variants
+    const y = d3.scaleBand()
+      .domain(allVariants)  // each variant on y-axis
+      .range([margin.top, height - margin.bottom])
       .padding(0.1);
 
-    const y = d3.scaleLinear()
+    // 2) x-axis now uses linear scale for quantity
+    const x = d3.scaleLinear()
       .domain([0, maxStackedValue])
-      .range([height - margin.bottom, margin.top]);
+      .range([margin.left, width - margin.right]);
 
     // A color scale for the "layers" (i.e. each date)
     const color = d3.scaleOrdinal()
@@ -213,7 +219,7 @@ function drawMultipleStackedBars(data) {
       .attr("width", width)
       .attr("height", height);
 
-    // 1) Create a tooltip (often appended to <body> or the container)
+    // 1) Create a tooltip
     const tooltip = d3.select("body")
       .append("div")
       .style("position", "absolute")
@@ -225,43 +231,44 @@ function drawMultipleStackedBars(data) {
       .style("font-size", "12px")
       .style("opacity", 0); // start hidden
 
-    // H) Draw stacked bars with a "layer reveal" animation.
+    // H) Draw stacked bars
     const bar = svg.selectAll("g.layer")
       .data(series)
-      .enter().append("g")
+      .enter()
+      .append("g")
       .attr("class", "layer")
       .attr("fill", (d, i) => color(String(dateKeys[i])));
 
-    // First, append <rect> elements with y= y(0) and height=0
-    // so they are "collapsed."
+    // For a horizontal stacked bar:
+    // - `y(...)` is determined by variant
+    // - `height` is y.bandwidth()
+    // - `x(...)` is determined by [d[0], d[1]] range
     bar.selectAll("rect")
       .data(d => d)
-      .enter().append("rect")
-      .attr("x", d => x(d.data.variant))
-      .attr("width", x.bandwidth())
-      .attr("y", y(0))       // start from the bottom
-      .attr("height", 0)    // no initial height
+      .enter()
+      .append("rect")
+      .attr("y", d => y(d.data.variant))
+      .attr("height", y.bandwidth())
+      .attr("x", d => x(d[0]))
+      .attr("width", 0) // start collapsed for animation
       // 4) Add tooltip events
       .on("mouseover", function (event, dRect) {
-
         tooltip.style("opacity", 1);
         // Quantity is (y1 - y0)
         const quantity = dRect[1] - dRect[0];
         // The layer index is the parent <g>’s datum index:
         const layerIndex = d3.select(this.parentNode).datum().index;
-        // For demonstration, let's assume "layerIndex" gives the correct date index:
-        const dateVal = dateKeys[layerIndex];
         // Convert dateVal (timestamp) to a nice string
+        const dateVal = dateKeys[layerIndex];
         const dateStr = d3.timeFormat("%Y-%m-%d")(new Date(dateVal));
 
         tooltip.html(`
-        <strong>Date:</strong> ${dateStr}<br/>
-        <strong>Variant:</strong> ${dRect.data.variant}<br/>
-        <strong>Qty:</strong> ${quantity}
-      `);
+    <strong>Date:</strong> ${dateStr}<br/>
+    <strong>Variant:</strong> ${dRect.data.variant}<br/>
+    <strong>Qty:</strong> ${quantity}
+  `);
       })
       .on("mousemove", function (event) {
-        // Move tooltip near the mouse
         tooltip
           .style("left", (event.pageX + 12) + "px")
           .style("top", (event.pageY + 12) + "px");
@@ -270,49 +277,60 @@ function drawMultipleStackedBars(data) {
         tooltip.style("opacity", 0);
       });
 
-    // Step 1: After the transition completes, add markers for sold-out sizes
-    bar.each(function (d, i) {
-      d3.select(this).selectAll("rect")
-        .transition()
-        .delay(i * 1000)  // Keep existing animation
-        .duration(800)
-        .attr("y", d => y(d[1]))
-        .attr("height", d => y(d[0]) - y(d[1]))
-        .on("end", function (dRect) {  // Only execute after animation ends
+   // Step 1: Animate the reveal, then add sold-out marker
+bar.each(function (layerData, i) {
+  d3.select(this).selectAll("rect")
+    .transition()
+    .delay(i * 1000)
+    .duration(800)
+    .attr("x", d => x(d[0]))
+    .attr("width", d => x(d[1]) - x(d[0]))
+    .on("end", function (dRect) {
+      const quantity = dRect[1] - dRect[0];
+      if (quantity === 0) {
+        // Coordinates for our label
+        const labelX = x(dRect[1]) + 5;
+        const labelY = y(dRect.data.variant) + y.bandwidth() / 2;
+        const labelWidth = 50;
+        const labelHeight = 20;
 
-          const quantity = dRect[1] - dRect[0];  // Get bar height
-          if (quantity === 0) {
-            d3.select(this.parentNode) // Select parent group (<g>)
-              .append("text")  // Add "X" marker for sold-out
-              .attr("x", x(dRect.data.variant) + x.bandwidth() / 2)
-              .attr("y", y(dRect[1]) - 5)
-              .attr("text-anchor", "middle")
-              .attr("fill", "red")
-              .attr("font-size", "14px")
-              .attr("font-weight", "bold")
-              .text("X");
-          }
-        });
+        // Draw a red rectangle as the background
+        d3.select(this.parentNode)
+          .append("rect")
+          .attr("x", labelX)
+          .attr("y", labelY - labelHeight / 2)
+          .attr("width", labelWidth)
+          .attr("height", labelHeight)
+          .attr("fill", "#F46660")
+          .attr("rx", 3)  // rounded corners (optional)
+          .attr("ry", 3);
+
+        // Draw white text on top of the rectangle
+        d3.select(this.parentNode)
+          .append("text")
+          .attr("x", labelX + labelWidth / 2)
+          .attr("y", labelY)
+          .attr("text-anchor", "middle")
+          .attr("dominant-baseline", "middle")
+          .attr("fill", "white")
+          .attr("font-size", "12px")
+          .attr("font-weight", "bold")
+          .text("No Sale");
+      }
     });
+});
 
-
-    // I) Add X-axis (variants)
+    // I) Add X-axis (quantity)
     svg.append("g")
       .attr("class", "axis")
       .attr("transform", `translate(0, ${height - margin.bottom})`)
-      .call(d3.axisBottom(x))
-      .selectAll("text")
-      .style("text-anchor", "end")
-      .attr("dx", "-0.5em")
-      .attr("dy", "-0.2em")
-      .style("font-size", "11px")
-      .attr("transform", "rotate(-45)");
+      .call(d3.axisBottom(x).ticks(6));
 
-    // J) Add Y-axis (stacked quantity)
+    // J) Add Y-axis (variants)
     svg.append("g")
       .attr("class", "axis")
       .attr("transform", `translate(${margin.left}, 0)`)
-      .call(d3.axisLeft(y).ticks(6));
+      .call(d3.axisLeft(y));
 
     // K) Add product name as a title
     svg.append("text")
@@ -322,5 +340,6 @@ function drawMultipleStackedBars(data) {
       .style("font-size", "14px")
       .style("font-weight", "bold")
       .text(productName);
+
   }
 }
