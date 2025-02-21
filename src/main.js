@@ -66,22 +66,17 @@ async function loadDataTwo() {
 
   // 6) Create a new dataset with product/color fields
   const originalData = preprocessData(filteredProducts);
-
-  // 7) Identify unique products & colors from the data
   //    (We'll use these to build the checkboxes)
   window.allProducts = Array.from(new Set(originalData.map(d => d.product)));
   window.allColors = Array.from(new Set(originalData.map(d => d.color)));
-  // (Using window.* is just one way to make them accessible in your updateChart function. 
-  //  You could also define them in an outer scope.)
-
   // 8) Build the UI (the checkboxes), passing updateChart as the callback
   createCheckboxes("#product-filters", allProducts, updateChart);
   createCheckboxes("#color-filters", allColors, updateChart);
   // 4) Build date filter
   d3.select("#daysSelector").on("change", updateChart);
 
-  
-  
+
+
   drawMultipleStackedBars(originalData)
 
   function updateChart() {
@@ -108,9 +103,6 @@ async function loadDataTwo() {
 
     // 4) read the #daysSelector value
     const selectedDays = +d3.select("#daysSelector").node().value;
-    // e.g. 1, 3, 6, 30, or 9999
-
-    // figure out the maximum date among all data
     // (We assume originalData is the preprocessed array you already have)
     const maxDate = d3.max(originalData, d => d.date);
     // if there's no data, bail out
@@ -122,6 +114,7 @@ async function loadDataTwo() {
     // compute the cutoff date (today's max - selectedDays)
     // If "9999" is chosen => user wants "All", so we won't filter by date
     let cutoff = null;
+    console.log("selecte days", selectedDays)
     if (selectedDays !== 9999) {
       cutoff = new Date(maxDate.getTime() - (selectedDays * 24 * 60 * 60 * 1000));
     }
@@ -156,10 +149,9 @@ function drawMultipleStackedBars(data) {
 
   // 1) Identify all product names by grouping
   const productsMap = d3.group(newData, d => d.name);
-  // productsMap is a Map: { "Nude Bralette" -> [ {date, name, variants: [...]}, ... ] }
 
   // 2) Set up chart dimensions and container
-  const width = 400;
+  const width = 300;
   const height = 300;
   const margin = { top: 30, right: 20, bottom: 50, left: 40 };
 
@@ -172,7 +164,9 @@ function drawMultipleStackedBars(data) {
       new Set(entries.map(d => +d.date)) // +d.date => numeric timestamp for sorting
     ).sort((a, b) => a - b);
 
-    const allVariants = [ "xs", "sm", "md","lg","xl","sdd","mdd","ldd","xldd","2xldd"];
+
+
+    const allVariants = ["xs", "sm", "md", "lg", "xl", "sdd", "mdd", "ldd", "xldd", "2xldd"];
 
     // C) Pivot the data so each object has structure:
     //    { variant: "xs", [date1]: qty, [date2]: qty, ... }
@@ -192,57 +186,40 @@ function drawMultipleStackedBars(data) {
       return row;
     });
 
-    // D) Prepare the stack generator
-    //    Each date is a separate layer in the stack
+    console.log("dates final",)
+
     const stack = d3.stack()
       .keys(dateKeys); // your "layers" are the different dates
-
     // Generate the stacked layers
     const series = stack(pivotedData);
-    // 'series' is an array of layers (one layer per date).
-    // Each layer is an array of points ([y0, y1]) for each variant row.
-
     // E) Compute max stacked value to define y-scale
     const maxStackedValue = d3.max(series, layer =>
       d3.max(layer, d => d[1])
     );
 
     // F) Create scales
-    const x = d3.scaleBand()
-      .domain(allVariants) // each variant on x-axis
-      .range([margin.left, width - margin.right])
+    // 1) y-axis now uses band scale for variants
+    const y = d3.scaleBand()
+      .domain(allVariants)  // each variant on y-axis
+      .range([margin.top, height - margin.bottom])
       .padding(0.1);
 
-    const y = d3.scaleLinear()
+    // 2) x-axis now uses linear scale for quantity
+    const x = d3.scaleLinear()
       .domain([0, maxStackedValue])
-      .range([height - margin.bottom, margin.top]);
+      .range([margin.left, width - margin.right]);
 
     // A color scale for the "layers" (i.e. each date)
     const color = d3.scaleOrdinal()
       .domain(dateKeys.map(String))
-      .range(d3.schemeSet2);
+      .range(["#0077B6", "#F77F00"]);
 
     // G) Create an <svg> for this product
     const svg = container.append("svg")
       .attr("width", width)
       .attr("height", height);
 
-    // H) Draw stacked bars
-    //    One <g> per layer (date), then rectangles for each variant row
-    // svg.selectAll("g.layer")
-    //   .data(series)
-    //   .enter().append("g")
-    //     .attr("class", "layer")
-    //     .attr("fill", (d, i) => color(String(dateKeys[i])))
-    //   .selectAll("rect")
-    //   .data(d => d) // each sub-array for the variants
-    //   .enter().append("rect")
-    //     .attr("x", d => x(d.data.variant))
-    //     .attr("y", d => y(d[1]))
-    //     .attr("height", d => y(d[0]) - y(d[1]))
-    //     .attr("width", x.bandwidth());
-
-    // 1) Create a tooltip (often appended to <body> or the container)
+    // 1) Create a tooltip
     const tooltip = d3.select("body")
       .append("div")
       .style("position", "absolute")
@@ -254,62 +231,44 @@ function drawMultipleStackedBars(data) {
       .style("font-size", "12px")
       .style("opacity", 0); // start hidden
 
-    // H) Draw stacked bars with a "layer reveal" animation.
+    // H) Draw stacked bars
     const bar = svg.selectAll("g.layer")
       .data(series)
-      .enter().append("g")
+      .enter()
+      .append("g")
       .attr("class", "layer")
       .attr("fill", (d, i) => color(String(dateKeys[i])));
 
-    // First, append <rect> elements with y= y(0) and height=0
-    // so they are "collapsed."
+    // For a horizontal stacked bar:
+    // - `y(...)` is determined by variant
+    // - `height` is y.bandwidth()
+    // - `x(...)` is determined by [d[0], d[1]] range
     bar.selectAll("rect")
       .data(d => d)
-      .enter().append("rect")
-      .attr("x", d => x(d.data.variant))
-      .attr("width", x.bandwidth())
-      .attr("y", y(0))       // start from the bottom
-      .attr("height", 0)    // no initial height
+      .enter()
+      .append("rect")
+      .attr("y", d => y(d.data.variant))
+      .attr("height", y.bandwidth())
+      .attr("x", d => x(d[0]))
+      .attr("width", 0) // start collapsed for animation
       // 4) Add tooltip events
       .on("mouseover", function (event, dRect) {
-        // 'this' is the rect; 'dRect' is the stacked point [y0, y1],
-        // plus dRect.data for the row data (which includes `variant`).
-
-        // The parent group has data for the entire layer:
-        //   each barGroups node has the form: [ [y0,y1], [y0,y1], ... ]
-        // But we actually need the date index from the parent's data index.
-        // Easiest is to do the “each” layering approach shown below,
-        // or simply store the date inside a local variable.
-        // If we structured it using barGroups.each(...) see next code block.
-
         tooltip.style("opacity", 1);
-
         // Quantity is (y1 - y0)
         const quantity = dRect[1] - dRect[0];
         // The layer index is the parent <g>’s datum index:
         const layerIndex = d3.select(this.parentNode).datum().index;
-        // (But in standard d3.stack output, the .index property may vary 
-        //  depending on your d3 version. You can also pass it around manually.)
-
-        // If your stack data doesn’t have .index, you can do:
-        //   const g = d3.select(this.parentNode);
-        //   const i = barGroups.nodes().indexOf(g.node());
-        //   const dateVal = dateKeys[i];
-        // OR just do the barGroups.each(...) approach (shown below).
-
-        // For demonstration, let's assume "layerIndex" gives the correct date index:
-        const dateVal = dateKeys[layerIndex];
         // Convert dateVal (timestamp) to a nice string
+        const dateVal = dateKeys[layerIndex];
         const dateStr = d3.timeFormat("%Y-%m-%d")(new Date(dateVal));
 
         tooltip.html(`
-        <strong>Date:</strong> ${dateStr}<br/>
-        <strong>Variant:</strong> ${dRect.data.variant}<br/>
-        <strong>Qty:</strong> ${quantity}
-      `);
+    <strong>Date:</strong> ${dateStr}<br/>
+    <strong>Variant:</strong> ${dRect.data.variant}<br/>
+    <strong>Qty:</strong> ${quantity}
+  `);
       })
       .on("mousemove", function (event) {
-        // Move tooltip near the mouse
         tooltip
           .style("left", (event.pageX + 12) + "px")
           .style("top", (event.pageY + 12) + "px");
@@ -317,34 +276,61 @@ function drawMultipleStackedBars(data) {
       .on("mouseout", function () {
         tooltip.style("opacity", 0);
       });
-    // Now, for each layer, transition the rectangles to their
-    // correct stacked heights, adding a delay so that each date
-    // appears in sequence. i * 1000 => wait 1s per layer index.
-    bar.each(function (d, i) {
-      d3.select(this).selectAll("rect")
-        .transition()
-        .delay(i * 1000)       // delay each layer i by i*1000 ms
-        .duration(800)         // how long the animation lasts
-        .attr("y", d => y(d[1]))
-        .attr("height", d => y(d[0]) - y(d[1]));
-    });
 
-    // I) Add X-axis (variants)
+   // Step 1: Animate the reveal, then add sold-out marker
+bar.each(function (layerData, i) {
+  d3.select(this).selectAll("rect")
+    .transition()
+    .delay(i * 1000)
+    .duration(800)
+    .attr("x", d => x(d[0]))
+    .attr("width", d => x(d[1]) - x(d[0]))
+    .on("end", function (dRect) {
+      const quantity = dRect[1] - dRect[0];
+      if (quantity === 0) {
+        // Coordinates for our label
+        const labelX = x(dRect[1]) + 5;
+        const labelY = y(dRect.data.variant) + y.bandwidth() / 2;
+        const labelWidth = 50;
+        const labelHeight = 20;
+
+        // Draw a red rectangle as the background
+        d3.select(this.parentNode)
+          .append("rect")
+          .attr("x", labelX)
+          .attr("y", labelY - labelHeight / 2)
+          .attr("width", labelWidth)
+          .attr("height", labelHeight)
+          .attr("fill", "#F46660")
+          .attr("rx", 3)  // rounded corners (optional)
+          .attr("ry", 3);
+
+        // Draw white text on top of the rectangle
+        d3.select(this.parentNode)
+          .append("text")
+          .attr("x", labelX + labelWidth / 2)
+          .attr("y", labelY)
+          .attr("text-anchor", "middle")
+          .attr("dominant-baseline", "middle")
+          .attr("fill", "white")
+          .attr("font-size", "12px")
+          .attr("font-weight", "bold")
+          .text("No Sale");
+      }
+    });
+});
+
+    // I) Add X-axis (quantity)
     svg.append("g")
       .attr("class", "axis")
       .attr("transform", `translate(0, ${height - margin.bottom})`)
-      .call(d3.axisBottom(x))
-      .selectAll("text")
-      .style("text-anchor", "end")
-      .attr("dx", "-0.5em")
-      .attr("dy", "-0.2em")
-      .attr("transform", "rotate(-30)");
+      .call(d3.axisBottom(x).ticks(6));
 
-    // J) Add Y-axis (stacked quantity)
+    // J) Add Y-axis (variants)
     svg.append("g")
       .attr("class", "axis")
       .attr("transform", `translate(${margin.left}, 0)`)
-      .call(d3.axisLeft(y).ticks(6));
+      .call(d3.axisLeft(y));
 
     // K) Add product name as a title
     svg.append("text")
@@ -354,5 +340,6 @@ function drawMultipleStackedBars(data) {
       .style("font-size", "14px")
       .style("font-weight", "bold")
       .text(productName);
+
   }
 }
